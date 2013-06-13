@@ -1,4 +1,4 @@
-;;  Copyright (C) 2012
+;;  Copyright (C) 2012 2013
 ;;      "Mu Lei" known as "NalaGinrut" <NalaGinrut@gmail.com>
 ;;  Ragnarok is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License as published by
@@ -37,42 +37,40 @@
 
 (define (make-parser)
   (lalr-parser
-   (
-    ;; punctuation
-    semi-colon comma dot lbrace lparen rbrace rparen newline
+   (;; punctuation
+    semi-colon comma dot lbrace lparen rbrace rparen
     ;; keyword
     if while do skip true false
+     ;; literal
+    number variable
     (nonassoc: then)
     (nonassoc: else)
     ;; operation
     not assign less-eq eq
     (left: + -)
     (left: *)
-    (left: or and)
-    ;; literal
-    number variable)
+    (left: or and))
 
    (program (stmt) : $1
 	    (*eoi*) : *eof-object*)
 
-   (stmt (expr-stmt) : $1
-         (empty-stmt) : $1)
-	 
+   (stmt (empty-stmt) : $1 
+         (expr-stmt) : $1)
+         	 
    ;; (null-stmt) : $1)
 
    ;; FIXME: we need recursive blocks
    ;;(block (lbrace stmt-list rbrace) : $2)
    
-   (stmt-list (stmt) : $1
-   	      (stmt-list stmt) 
-    	      : (if (and (pair? $1) (eq? (car $1) 'begin))
-    		    `(begin ,@(cdr $1) ,$2)
-    		    `(begin ,$1 ,$2)))
+   ;;(stmt-list (stmt) : $1
+   ;;	      (stmt-list stmt) : (if (and (pair? $1) (eq? (car $1) 'begin))
+    ;;                                 `(begin ,@(cdr $1) ,$2)
+    ;;                                 `(begin ,$1 ,$2)))
 
    (empty-stmt (semi-colon) : '(begin))
-   (expr-stmt (exp semi-colon) : $1)
+   (expr-stmt (Exp semi-colon) : $1)
 
-   (exp	(Aexp) : $1
+   (Exp	(Aexp) : $1
 	(Bexp) : $1
 	(Cexp) : $1)
    

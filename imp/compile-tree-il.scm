@@ -46,7 +46,7 @@
               props))))
 
 (define-syntax-rule (->boolean x)
-  (not (eq? x 'false)))
+  (not (equal? x 'false)))
   
 ;; for emacs:
 ;; (put 'pmatch/source 'scheme-indent-function 1)
@@ -76,8 +76,7 @@
       (let1 what (lambda (v)
                    (-> (begin (proc v)
                               (-> (lexical v v)))))))
-    (pmatch/source 
-     src
+    (pmatch/source src
      (true
       (-> (const #t)))
      (false

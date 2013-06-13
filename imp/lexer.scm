@@ -54,8 +54,7 @@
     ("{" . lbrace)
     ("}" . rbrace)
     ("(" . lparen)
-    (")" . rparen)
-    ("\n" . newline)))
+    (")" . rparen)))
 
 (define *charset-not-in-var*
   (string->char-set (string-append *invalid-char* *operations* *delimiters*)))
@@ -63,6 +62,10 @@
 (define is-whitespace?
   (lambda (c)
     (char-set-contains? char-set:whitespace c)))
+
+(define is-linebreak?
+  (lambda (c)
+    (member c '(#\newline #\cr))))
 
 ;; in Simple IMP, we only have bin/oct/hex number
 (define is-number?
@@ -108,7 +111,7 @@
 	    #f)))))
 
 (define* (get-number lst #:optional (base 10))
-  (string->number (apply string (reverse lst)) base))
+  (string->number (apply string lst) base))
 
 (define come-back-baby
   (lambda (port . babies)
@@ -121,39 +124,49 @@
     (let ((i (char->integer c)))
       (and (>= i #x30) (<= i #x39)))))
 
+(define (head-is-sign? port)
+  (let ((c (peek-char port)))
+    (cond
+     ((and (char=? c) (or (char=? c #\-) (char=? c #\+)))
+      (read-char port)
+      c)
+     (else #\+))))
+
 (define next-is-number?
   (lambda (port)
-    (if (is-immediate-number? (peek-char port))
-	10 ;; decimal situation
-	(let* ((c0 (read-char port))
-	       (c1 (read-char port))
-	       (c2 (peek-char port)))
-	  (if (char=? c0 #\#)
-              (if (is-number? c2)
-                  (case c1
-                    ((#\x) 16)
-                    ((#\o) 8)
-                    ((#\b) 2)
-                    (else (error "invalid number base!" c1)))
-                  (error "invalid number form!" c2))
-	      (begin
-		(come-back-baby port c1 c0)
-		#f))))))
+    (cond
+     ((is-immediate-number? (peek-char port))
+      10) ;; decimal situation
+     ((head-is-sign? port)
+      => (lambda (sign)
+           (let ((c0 (peek-char port)))
+             (if (char=? c0 #\#) ;; #x #o #d #b
+                 (let* ((c0 (read-char port))
+                        (c1 (read-char port))
+                        (c2 (peek-char port)))
+                   (if (is-number? c2)
+                       (string->number
+                        (format #f "~a~a"
+                                sign
+                                (case c1
+                                  ((#\x) 16)
+                                  ((#\d) 10)
+                                  ((#\o) 8)
+                                  ((#\b) 2)
+                                  (else (error "invalid number base!" (string c0 c1))))))
+                       (begin
+                         (come-back-baby port c0 c1)
+                         #f)))
+                 (if (is-number? c0)
+                     (string->number (format #f "~a~a" sign 10)) ;; always base 10, +10 or -10
+                     #f)))))
+     (else #f)))) ;; not a number
 	    
 (define read-number
   (lambda (port base)
-    (let lp((c (read-char port)) (num '()))
-      (cond
-       ((or (is-delimiter? c) (is-op? c)) 
-	(let ((ret (get-number num base)))
-	  (or (eof-object? c) (unget-char1 c port))
-	  (if ret 
-	      (values 'number ret)
-	      (error "invalid number!" (apply string (reverse num))))))
-       ((is-number? c)
-	(lp (read-char port) (cons c num)))
-       (else
-	(error "invalid number!" (apply string (reverse (cons c num)))))))))
+    (let* ((str (read-word port))
+           (num (string->number str (abs base))))
+      (values 'number (if (> base 0) num (- num))))))
 
 (define next-is-operation?
   (lambda (port)
@@ -173,7 +186,7 @@
       #f)
      (else
       (string-any (lambda (c)
-                   (and (char-set-contains? *charset-not-in-var* c) c))
+                   (and (not (char-set-contains? *charset-not-in-var* c)) c))
                   var)))))
 	 
 (define next-is-var?
@@ -229,7 +242,7 @@
 	(skip-comment port) ;; only line comment
 	(next-token port))
        ((is-whitespace? c) 
-	(read-char port) 
+	(read-char port) ;; skip whitespace
 	(next-token port))
        ((next-is-number? port)
 	=> (lambda (base)
@@ -247,7 +260,7 @@
 	=> (lambda (punc)
  	     (return punc #f)))
        (else
-        (error "invalid token!"))))))
+        (error "invalid token!" c))))))
 
 (define imp-tokenizer
   (lambda (port)
