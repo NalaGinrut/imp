@@ -73,16 +73,16 @@
    (Exp	(Aexp) : $1
 	(Bexp) : $1
 	(Cexp) : $1)
-   
-   (atom (number) : `(number ,$1)
-	 (variable) : `(variable ,$1)
-	 (bool) : $1)
 
    ;; left to right
    (Aexp (atom) : $1
 	 (Aexp + Aexp) : `(+ ,$1 ,$3)
 	 (Aexp - Aexp) : `(- ,$1 ,$3)
 	 (Aexp * Aexp) : `(* ,$1 ,$3))
+
+   (atom (number) : `(number ,$1)
+	 (variable) : `(variable ,$1)
+	 (bool) : $1)
 	 
    (Bexp (bool) : $1
 	 (Aexp eq Aexp) : `(eq ,$1 ,$3)

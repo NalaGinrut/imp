@@ -1,4 +1,4 @@
-;;  Copyright (C) 2012
+;;  Copyright (C) 2012 2013
 ;;      "Mu Lei" known as "NalaGinrut" <NalaGinrut@gmail.com>
 ;;  Ragnarok is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License as published by
@@ -63,10 +63,6 @@
   (lambda (c)
     (char-set-contains? char-set:whitespace c)))
 
-(define is-linebreak?
-  (lambda (c)
-    (member c '(#\newline #\cr))))
-
 ;; in Simple IMP, we only have bin/oct/hex number
 (define is-number?
   (lambda (c)
@@ -88,13 +84,8 @@
 (define (unget-char1 c port)
   (and (char? c) (unread-char c port)))
  
-(define port-skip
-  (lambda (port n)
-    (let lp((n n))
-      (cond
-       ((not (zero? n))
-	(read-char port)
-	(lp (1- n)))))))
+(define (port-skip port n)
+  (and (> n 0) (port-skip port (1- n))))
 	 
 (define read-word
   (lambda (port)
@@ -124,60 +115,57 @@
     (let ((i (char->integer c)))
       (and (>= i #x30) (<= i #x39)))))
 
-(define (head-is-sign? port)
+(define (is-valid-number-header? port)
   (let ((c (peek-char port)))
     (cond
-     ((and (char=? c) (or (char=? c #\-) (char=? c #\+)))
-      (read-char port)
-      c)
-     (else #\+))))
+     ((eof-object? c) #f)
+     ((char=? c #\#)
+      #t) ; don't skip #\#, and it's definitly #\+
+     (else #f))))
 
 (define next-is-number?
   (lambda (port)
     (cond
      ((is-immediate-number? (peek-char port))
       10) ;; decimal situation
-     ((head-is-sign? port)
-      => (lambda (sign)
-           (let ((c0 (peek-char port)))
-             (if (char=? c0 #\#) ;; #x #o #d #b
-                 (let* ((c0 (read-char port))
-                        (c1 (read-char port))
-                        (c2 (peek-char port)))
-                   (if (is-number? c2)
-                       (string->number
-                        (format #f "~a~a"
-                                sign
-                                (case c1
-                                  ((#\x) 16)
-                                  ((#\d) 10)
-                                  ((#\o) 8)
-                                  ((#\b) 2)
-                                  (else (error "invalid number base!" (string c0 c1))))))
-                       (begin
-                         (come-back-baby port c1 c0)
-                         #f)))
-                 (if (is-number? c0)
-                     (string->number (format #f "~a~a" sign 10)) ;; always base 10, +10 or -10
-                     #f)))))
+     ((is-valid-number-header? port)
+      (let ((c0 (peek-char port)))
+        (if (char=? c0 #\#) ;; #x #o #d #b
+            (let* ((c0 (read-char port))
+                   (c1 (read-char port))
+                   (c2 (peek-char port)))
+              (if (is-number? c2)
+                  (case c1
+                    ((#\x) 16)
+                    ((#\d) 10)
+                    ((#\o) 8)
+                    ((#\b) 2)
+                    (else (error "invalid number base!" (string c0 c1))))
+                  (begin
+                    (come-back-baby port c1 c0)
+                    #f)))
+            (if (is-number? c0)
+                10
+                #f))))
      (else #f)))) ;; not a number
 	    
 (define read-number
   (lambda (port base)
     (let* ((str (read-word port))
-           (num (string->number str (abs base))))
-      (values 'number (if (> base 0) num (- num))))))
+           (num (string->number str base)))
+      (values 'number num))))
 
 (define next-is-operation?
   (lambda (port)
-    (let lp((c (read-char port)) (op '()))
-      (cond
-       ((checker *operations* c)
-	(lp (read-char port) (cons c op)))
-       (else
-	(unget-char1 c port)
-	(assoc-ref *op-tokens* (apply string (reverse op))))))))
-
+    (if (not (checker *operations* (peek-char port)))
+        #f ; not an operation
+        (let lp((c (read-char port)) (op '()))
+          (cond
+           ((checker *operations* c)
+            (lp (read-char port) (cons c op)))
+           (else
+            (unget-char1 c port)
+            (assoc-ref *op-tokens* (apply string (reverse op)))))))))
 (define check-var
   (lambda (var)
     (cond
@@ -223,44 +211,61 @@
 	(unget-char1 c port)
 	#f)))))
 	  
-(define (port-source-location port)
+(define-syntax-rule (port-source-location port)
   (make-source-location (port-filename port)
                         (port-line port)
                         (port-column port)
                         (false-if-exception (ftell port))
                         #f))
 
+(define-syntax-rule (return port category value)
+  (begin
+   ;; (format #t "f:~a l:~a c:~a fie:~a end:~a~%"
+    ;;        (port-filename port) (port-line port)
+      ;;;      (port-column port) (false-if-exception (ftell port))
+         ;;   #f)
+    (make-lexical-token category (port-source-location port) value)))
+
 (define next-token
   (lambda (port)
-    (let* ((loc (port-source-location port))
-	   (return (lambda (category value)
-		     (make-lexical-token category loc value)))
-	   (c (peek-char port)))
-      (cond
-       ((eof-object? c) '*eoi*)
-       ((next-is-comment? port) 
-	(skip-comment port) ;; only line comment
-	(next-token port))
-       ((is-whitespace? c) 
-	(read-char port) ;; skip whitespace
-	(next-token port))
-       ((next-is-number? port)
-	=> (lambda (base)
-	     (receive (type ret) (read-number port base) (return type ret))))
-       ((next-is-keyword? port) 
-	=> (lambda (word)
-	     (return word #f)))
-       ((next-is-var? port)
-	=> (lambda (var)
-	     (return 'variable var)))
-       ((next-is-operation? port) 
-	=> (lambda (op)
-	     (return op #f)))
-       ((next-is-puctuation? port)
-	=> (lambda (punc)
- 	     (return punc #f)))
-       (else
-        (error "invalid token!" c))))))
+    (let ((c (peek-char port)))
+      (case c
+        ((#\ht #\vt #\np #\space #\x00A0) ; whitespace
+         (read-char port)
+         (next-token port))
+        ((#\newline #\cr)                 ; line break
+         (read-char port)
+         (next-token port))
+        (else
+         (cond
+          ((eof-object? c) '*eoi*)
+          ((next-is-comment? port) 
+           (skip-comment port) ;; only line comment
+           (next-token port))
+          ;;((is-whitespace? c)
+          ;; (read-char port) ;; skip whitespace
+          ;; (next-token port))
+          ((next-is-number? port)
+           => (lambda (base)
+                ;;(format #t "number base:~a~%" base)
+                (receive (type ret) (read-number port base) (return port type ret))))
+          ((next-is-keyword? port) 
+           => (lambda (keyword)
+               ;; (format #t "keyword: ~a~%" keyword)
+                (return port keyword #f)))
+          ((next-is-var? port)
+           => (lambda (var)
+               ;; (format #t "var: ~a~%" var)
+                (return port 'variable var)))
+          ((next-is-operation? port) 
+           => (lambda (op)
+                ;;(format #t "op: ~a~%" op)
+                (return port op #f)))
+          ((next-is-puctuation? port)
+           => (lambda (punc)
+               ;; (format #t "punc ~a~%" punc)
+                (return port punc #f)))
+          (else (error "invalid token!" c))))))))
 
 (define imp-tokenizer
   (lambda (port)
