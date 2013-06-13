@@ -17,6 +17,7 @@
   #:use-module (system base lalr)
   #:use-module (ice-9 receive)
   #:use-module (ice-9 rdelim)
+  #:use-module (srfi srfi-1)
   #:export (make-imp-tokenizer))
 
 (define *operations* "~+-*=<^|:")
@@ -56,6 +57,9 @@
     (")" . rparen)
     ("\n" . newline)))
 
+(define *charset-not-in-var*
+  (string->char-set (string-append *invalid-char* *operations* *delimiters*)))
+
 (define is-whitespace?
   (lambda (c)
     (char-set-contains? char-set:whitespace c)))
@@ -78,6 +82,9 @@
     (and (not (eof-object? c))
 	 (checker *operations* c))))
 
+(define (unget-char1 c port)
+  (and (char? c) (unread-char c port)))
+ 
 (define port-skip
   (lambda (port n)
     (let lp((n n))
@@ -106,7 +113,7 @@
 (define come-back-baby
   (lambda (port . babies)
     (for-each (lambda (c)
-		(and (char? c) (unread-char c port)))
+		(unget-char1 c port))
 	      babies)))
 
 (define is-immediate-number?
@@ -121,12 +128,14 @@
 	(let* ((c0 (read-char port))
 	       (c1 (read-char port))
 	       (c2 (peek-char port)))
-	  (if (and (char=? c0 #\#) (is-number? c2))
-	      (case c1
-		((#\x) 16)
-		((#\o) 8)
-		((#\b) 2)
-		(else (error "invalid number base!" c1)))
+	  (if (char=? c0 #\#)
+              (if (is-number? c2)
+                  (case c1
+                    ((#\x) 16)
+                    ((#\o) 8)
+                    ((#\b) 2)
+                    (else (error "invalid number base!" c1)))
+                  (error "invalid number form!" c2))
 	      (begin
 		(come-back-baby port c1 c0)
 		#f))))))
@@ -137,7 +146,7 @@
       (cond
        ((or (is-delimiter? c) (is-op? c)) 
 	(let ((ret (get-number num base)))
-	  (or (eof-object? c) (unread-char c port))
+	  (or (eof-object? c) (unget-char1 c port))
 	  (if ret 
 	      (values 'number ret)
 	      (error "invalid number!" (apply string (reverse num))))))
@@ -153,24 +162,19 @@
        ((checker *operations* c)
 	(lp (read-char port) (cons c op)))
        (else
-	(unread-char c port)
+	(unget-char1 c port)
 	(assoc-ref *op-tokens* (apply string (reverse op))))))))
 
 (define check-var
   (lambda (var)
-    (call/cc (lambda (ret) 
-	       (and (not (string-null? var))
-		    (is-immediate-number? (string-ref var 0))
-		    (ret #f))
-	       (string-for-each 
-		(lambda (c) 
-		  (let ((s (string c)))
-		    (unless (or (string-contains *invalid-char* s)
-				(string-contains *operations* s)
-				(string-contains *delimiters* s))
-		      (ret #t))))
-		var)
-	       #f))))
+    (cond
+     ((and (not (string-null? var))
+           (is-immediate-number? (string-ref var 0)))
+      #f)
+     (else
+      (string-any (lambda (c)
+                   (and (char-set-contains? *charset-not-in-var* c) c))
+                  var)))))
 	 
 (define next-is-var?
   (lambda (port)
@@ -203,7 +207,7 @@
       (cond
        (punc punc)
        (else
-	(unread-char c port)
+	(unget-char1 c port)
 	#f)))))
 	  
 (define (port-source-location port)
@@ -213,7 +217,7 @@
                         (false-if-exception (ftell port))
                         #f))
 
-(define imp-tokenizer
+(define next-token
   (lambda (port)
     (let* ((loc (port-source-location port))
 	   (return (lambda (category value)
@@ -223,10 +227,10 @@
        ((eof-object? c) '*eoi*)
        ((next-is-comment? port) 
 	(skip-comment port) ;; only line comment
-	(imp-tokenizer port))
+	(next-token port))
        ((is-whitespace? c) 
 	(read-char port) 
-	(imp-tokenizer port))
+	(next-token port))
        ((next-is-number? port)
 	=> (lambda (base)
 	     (receive (type ret) (read-number port base) (return type ret))))
@@ -241,18 +245,18 @@
 	     (return op #f)))
        ((next-is-puctuation? port)
 	=> (lambda (punc)
-	     (return punc #f)))
+ 	     (return punc #f)))
        (else
-	(error "wrong syntax!" c))))))
+        (error "invalid token!"))))))
+
+(define imp-tokenizer
+  (lambda (port)
+    (let lp ((out '()))
+      (let ((tok (next-token port)))
+ 	(if (eq? tok '*eoi*)
+ 	    (reverse! out)
+ 	    (lp (cons tok out)))))))
 
 (define (make-imp-tokenizer port)
   (lambda ()
-    (imp-tokenizer port)))
-
-;; (define imp-tokenize
-;;   (lambda (port)
-;;     (let lp ((out '()))
-;;       (let ((tok (imp-tokenizer port)))
-;; 	(if (eq? tok '*eoi*)
-;; 	    (reverse! out)
-;; 	    (lp (cons tok out)))))))
+    (next-token port))) ;;(imp-tokenizer port)))

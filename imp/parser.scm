@@ -37,38 +37,40 @@
 
 (define (make-parser)
   (lalr-parser
-   (;; keyword
+   (
+    ;; punctuation
+    semi-colon comma dot lbrace lparen rbrace rparen newline
+    ;; keyword
     if while do skip true false
-       (nonassoc: then)
-       (nonassoc: else)
-	 ;; operation
-	 not assign less-eq eq
-	 (left: + -)
-	 (left: *)
-	 (left: or and)
-	 ;; punctuation
-	 semi-colon comma dot lbrace lparen rbrace rparen newline
-	 ;; literal
-	 number variable)
+    (nonassoc: then)
+    (nonassoc: else)
+    ;; operation
+    not assign less-eq eq
+    (left: + -)
+    (left: *)
+    (left: or and)
+    ;; literal
+    number variable)
 
    (program (stmt) : $1
 	    (*eoi*) : *eof-object*)
 
-   (stmt (exp-stmt) : $1)
+   (stmt (expr-stmt) : $1
+         (empty-stmt) : $1)
 	 
-   (exp-stmt (exp semi-colon) : $1
-	     (null-stmt) : $1)
-
-   (null-stmt (semi-colon) : '(skip))
+   ;; (null-stmt) : $1)
 
    ;; FIXME: we need recursive blocks
    ;;(block (lbrace stmt-list rbrace) : $2)
    
-   ;; (stmt-list (stmt) : $1
-   ;; 	      (stmt-list stmt) 
-   ;; 	      : (if (and (pair? $1) (eq? (car $1) 'begin))
-   ;; 		    `(begin ,@(cdr $1) ,$2)
-   ;; 		    `(begin ,$1 ,$2)))
+   (stmt-list (stmt) : $1
+   	      (stmt-list stmt) 
+    	      : (if (and (pair? $1) (eq? (car $1) 'begin))
+    		    `(begin ,@(cdr $1) ,$2)
+    		    `(begin ,$1 ,$2)))
+
+   (empty-stmt (semi-colon) : '(begin))
+   (expr-stmt (exp semi-colon) : $1)
 
    (exp	(Aexp) : $1
 	(Bexp) : $1
@@ -109,5 +111,3 @@
 	       : `(if-else ,$2 ,$4 ,$6))
 	         
    (loop-context (while Bexp do Cexp) : `(while ,$2 ,$4))))
-
-
