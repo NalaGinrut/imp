@@ -155,7 +155,7 @@
                                   ((#\b) 2)
                                   (else (error "invalid number base!" (string c0 c1))))))
                        (begin
-                         (come-back-baby port c0 c1)
+                         (come-back-baby port c1 c0)
                          #f)))
                  (if (is-number? c0)
                      (string->number (format #f "~a~a" sign 10)) ;; always base 10, +10 or -10
