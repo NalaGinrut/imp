@@ -20,6 +20,11 @@
   #:use-module (srfi srfi-1)
   #:export (make-imp-tokenizer))
 
+(define (syntax-error what loc form . args)
+  (throw 'syntax-error #f what
+         (and=> loc source-location->source-properties)
+         form #f args))
+
 (define *operations* "~+-*=<^|:")
 
 (define *delimiters* (string-append " ,.\n;\t" *operations*))
@@ -57,7 +62,7 @@
     (")" . rparen)))
 
 (define *charset-not-in-var*
-  (string->char-set (string-append *invalid-char* *operations* *delimiters*)))
+  (string->char-set (string-append *invalid-char* *delimiters*)))
 
 (define is-whitespace?
   (lambda (c)
@@ -73,8 +78,7 @@
 
 (define is-delimiter?
   (lambda (c)
-    (or (eof-object? c)
-	(checker *delimiters* c))))
+    (checker *delimiters* c)))
 
 (define is-op?
   (lambda (c)
@@ -95,11 +99,11 @@
   (lambda (port)
     (let* ((word (read-word port))
 	   (keyword (assoc-ref *keywords* word)))
-      (if keyword
-	  keyword
-	  (begin
-	    (unread-string word port)
-	    #f)))))
+      (cond
+       (keyword keyword)
+       (else
+        (unread-string word port)
+        #f)))))
 
 (define* (get-number lst #:optional (base 10))
   (string->number (apply string lst) base))
@@ -119,8 +123,7 @@
   (let ((c (peek-char port)))
     (cond
      ((eof-object? c) #f)
-     ((char=? c #\#)
-      #t) ; don't skip #\#, and it's definitly #\+
+     ((char=? c #\#) #t)
      (else #f))))
 
 (define next-is-number?
@@ -166,31 +169,37 @@
            (else
             (unget-char1 c port)
             (assoc-ref *op-tokens* (apply string (reverse op)))))))))
+
 (define check-var
   (lambda (var)
     (cond
-     ((and (not (string-null? var))
-           (is-immediate-number? (string-ref var 0)))
+     ((or (string-null? var)
+          (is-immediate-number? (string-ref var 0)))
       #f)
      (else
-      (string-any (lambda (c)
-                   (and (not (char-set-contains? *charset-not-in-var* c)) c))
-                  var)))))
+      (not
+       (string-any (lambda (c)
+                     (and (char-set-contains? *charset-not-in-var* c) c))
+                   var))))))
 	 
 (define next-is-var?
   (lambda (port)
     (let ((word (read-word port)))
-      (if (check-var word)
-	  (string->symbol word)
-	  (begin
-	    (unread-string word port)
-	    #f)))))
+      (cond
+       ((check-var word) 
+        (string->symbol word))
+       (else
+        (unread-string word port)
+        #f)))))
     
 (define next-is-comment?
   (lambda (port)
     (let* ((c0 (read-char port))
 	   (c1 (read-char port)))
       (cond
+       ((or (eof-object? c0) (eof-object? c1))
+        (come-back-baby port c1 c0)
+        #f)
        ((and (char=? #\/ c0) (char=? #\/ c1))
 	#t)
        (else
@@ -276,5 +285,50 @@
  	    (lp (cons tok out)))))))
 
 (define (make-imp-tokenizer port)
-  (lambda ()
-    (next-token port))) ;;(imp-tokenizer port)))
+ (let ((div? #f) ; TODO: add div support
+       (eoi? #f)
+       (stack '()))
+   (lambda ()
+     (if eoi?
+         '*eoi*
+         (let ((tok (next-token port)))
+           (case (if (lexical-token? tok) (lexical-token-category tok) tok)
+             ((lparen)
+              (set! stack (cons tok stack)))
+             ((rparen)
+              (if (and (pair? stack)
+                       (eq? (lexical-token-category (car stack)) 'lparen))
+                  (set! stack (cdr stack))
+                  (syntax-error "unexpected right parenthesis"
+                                (lexical-token-source tok)
+                                #f)))
+             ((lbracket)
+              (set! stack (cons tok stack)))
+             ((rbracket)
+              (if (and (pair? stack)
+                       (eq? (lexical-token-category (car stack)) 'lbracket))
+                  (set! stack (cdr stack))
+                  (syntax-error "unexpected right bracket"
+                                (lexical-token-source tok)
+                                #f)))
+             ((lbrace)
+              (set! stack (cons tok stack)))
+             ((rbrace)
+              (if (and (pair? stack)
+                       (eq? (lexical-token-category (car stack)) 'lbrace))
+                  (set! stack (cdr stack))
+                  (syntax-error "unexpected right brace"
+                                (lexical-token-source tok)
+                                #f)))
+             ;; NOTE: this checker promised the last semi-colon before eof will return '*eoi* directly,
+             ;;       or we have to press EOF (C-d) to end the input.
+             ;;       BUT I WONDER IF THERE'S A BETTER WAY FOR THIS!
+             ((semi-colon)
+              (set! eoi? (null? stack))))
+
+           (set! div? (and (lexical-token? tok)
+                           (let ((cat (lexical-token-category tok)))
+                             (or (eq? cat 'variable)
+                                 (eq? cat 'number)
+                                 (eq? cat 'string)))))
+           tok)))))
