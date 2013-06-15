@@ -1,1 +1,28 @@
 A simple toy language IMP.
+
+=== BNF ===
+
+Int  ::= the domain of (unbounded) integer numbers, with usual operations on them
+Bool ::= the domain of Booleans
+Id   ::= standard identifiers
+AExp ::= Int
+       | Id
+       | AExp + AExp
+       | AExp - AExp
+       | AExp * AExp
+       | AExp / AExp
+BExp ::= Bool
+       | AExp <= AExp   // less than
+       | not BExp
+       | BExp ^ BExp    // and
+       | BExp | BExp    // or      
+Stmt ::= skip
+       | Id := AExp     // assignment operation
+       | Stmt;Stmt
+       | if BExp then Stmt else Stmt
+       | while BExp do Stmt
+Pgm  ::= var List{Id};Stmt
+
+
+Reference: 
+http://fsl.cs.uiuc.edu/images/0/0d/CS522-Spring-2011-PL-book-imp.pdf
