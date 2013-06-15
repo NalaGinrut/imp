@@ -1,4 +1,4 @@
-;;  Copyright (C) 2012
+;;  Copyright (C) 2012 2013
 ;;      "Mu Lei" known as "NalaGinrut" <NalaGinrut@gmail.com>
 ;;  Ragnarok is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License as published by
@@ -46,7 +46,7 @@
               props))))
 
 (define-syntax-rule (->boolean x)
-  (not (equal? x 'false)))
+  (not (eqv? (cadr x) 'false)))
   
 ;; for emacs:
 ;; (put 'pmatch/source 'scheme-indent-function 1)
@@ -78,9 +78,9 @@
                               (-> (lexical v v)))))))
     (pmatch/source src
      (true
-      (-> (const #t)))
+      (-> (const 'true)))
      (false
-      (-> (const #f)))
+      (-> (const 'false)))
      ((number ,x)
       (-> (const x)))
      ((variable ,x)
@@ -105,25 +105,25 @@
      ((skip)
       (-> (void)))
      ((if-else ,test ,then ,else)
-      (-> (if (->boolean (comp test e))
-	      (comp then e)
-	      (comp else e))))
+      (if (->boolean (comp test e))
+          (comp then e)
+          (comp else e)))
      ((if ,test ,then)
-      (-> (if (->boolean (comp test e))
-	      (comp then e)
-	      (const '*unspecified*))))
+      (if (->boolean (comp test e))
+          (comp then e)
+          (-> (const '*unspecified*))))
      ((not ,x)
       (-> (apply (-> (primitive 'not)) (comp x e))))
      ((and ,x ,y)
-      (-> (if (->boolean (comp x e))
-	      (comp y e)
-	      (-> (const #f)))))
+      (if (->boolean (comp x e))
+          (comp y e)
+          (-> (const 'false))))
      ((or ,x ,y)
       (let1 (comp x e)
 	    (lambda (v)
-	      (-> (if (->boolean (-> (lexical v v)))
-		      (-> (lexical v v))
-		      (comp y e))))))
+              (if (->boolean (-> (lexical v v)))
+                  (-> (lexical v v))
+                  (comp y e)))))
      ((while ,test ,do)
       (-> (while (->boolean (comp test e)) (comp do e))))	    
      )))

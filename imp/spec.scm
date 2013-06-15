@@ -1,4 +1,4 @@
-;;  Copyright (C) 2012
+;;  Copyright (C) 2012 2013
 ;;      "Mu Lei" known as "NalaGinrut" <NalaGinrut@gmail.com>
 ;;  Ragnarok is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License as published by
@@ -28,6 +28,4 @@
   #:reader      (lambda (port env) 
 		  (imp-read port))
   #:compilers   `((tree-il . ,compile-tree-il))
-  #:printer	write
-  )
-
+  #:printer	write)

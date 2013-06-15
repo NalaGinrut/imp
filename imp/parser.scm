@@ -82,6 +82,7 @@
 	 (variable) : `(variable ,$1))
 	 
    (Bexp (bool) : $1
+         (lparen Bexp rparen) : $2
 	 (Aexp eq Aexp) : `(eq ,$1 ,$3)
 	 (Aexp less-eq Aexp) : `(less-eq ,$1 ,$3)
 	 (not Bexp) : `(not ,$2)
@@ -89,6 +90,7 @@
 	 (Bexp or Bexp) : `(or ,$1 ,$3))
 
    (Cexp (skip) : `(skip)
+         (lbrace Cexp rbrace) : $2
 	 (assign-context) : $1
 	 (loop-context) : $1
 	 (pred-exp) : $1)
@@ -100,9 +102,16 @@
 
    (assign-context (variable assign Aexp) : `(store ,$1 ,$3))
 
-   (if-context (if Bexp then Cexp) 
-	       : `(if ,$2 ,$4)
-	       (if Bexp then Cexp else Cexp) 
-	       : `(if-else ,$2 ,$4 ,$6))
+   (if-context (if lparen Bexp rparen then Cexp) 
+	       : `(if ,$3 ,$6)
+               (if lparen Bexp rparen then lbrace stmt rbrace) 
+               : `(if ,$3 ,$7)
+	       (if lparen Bexp rparen then Cexp else Cexp) 
+	       : `(if-else ,$3 ,$6 ,$8)
+               (if lparen Bexp rparen then lbrace stmt rbrace else lbrace stmt rbrace) 
+	       : `(if-else ,$3 ,$7 ,$11))
 	         
-   (loop-context (while Bexp do Cexp) : `(while ,$2 ,$4))))
+   (loop-context (while lparen Bexp rparen do Cexp) 
+                 : `(while ,$2 ,$4)
+                 (while lparen Bexp rparen do lbrace stmt rbrace)
+                 : `(while ,$3 ,$7))))

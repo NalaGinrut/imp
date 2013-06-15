@@ -27,9 +27,9 @@
 
 (define *operations* "~+-*=<^|:")
 
-(define *delimiters* (string-append " ,.\n;\t" *operations*))
+(define *delimiters* (string-append " ,.\n;\t()[]{}" *operations*))
 
-(define *invalid-char* "`!@#$%&\\'\"?></")
+(define *invalid-char* " ^|*(){}[]`!@#$%&\\'\"?></")
   
 (define *keywords*
   '(("if" . if)
@@ -66,7 +66,7 @@
 
 (define is-whitespace?
   (lambda (c)
-    (char-set-contains? char-set:whitespace c)))
+    (and (char? c) (char-set-contains? char-set:whitespace c))))
 
 ;; in Simple IMP, we only have bin/oct/hex number
 (define is-number?
@@ -228,53 +228,37 @@
                         #f))
 
 (define-syntax-rule (return port category value)
-  (begin
-   ;; (format #t "f:~a l:~a c:~a fie:~a end:~a~%"
-    ;;        (port-filename port) (port-line port)
-      ;;;      (port-column port) (false-if-exception (ftell port))
-         ;;   #f)
-    (make-lexical-token category (port-source-location port) value)))
+  (make-lexical-token category (port-source-location port) value))
 
 (define next-token
   (lambda (port)
     (let ((c (peek-char port)))
-      (case c
-        ((#\ht #\vt #\np #\space #\x00A0) ; whitespace
-         (read-char port)
-         (next-token port))
-        ((#\newline #\cr)                 ; line break
-         (read-char port)
-         (next-token port))
-        (else
-         (cond
-          ((eof-object? c) '*eoi*)
-          ((next-is-comment? port) 
-           (skip-comment port) ;; only line comment
-           (next-token port))
-          ;;((is-whitespace? c)
-          ;; (read-char port) ;; skip whitespace
-          ;; (next-token port))
-          ((next-is-number? port)
-           => (lambda (base)
-                ;;(format #t "number base:~a~%" base)
-                (receive (type ret) (read-number port base) (return port type ret))))
-          ((next-is-keyword? port) 
-           => (lambda (keyword)
-               ;; (format #t "keyword: ~a~%" keyword)
-                (return port keyword #f)))
-          ((next-is-var? port)
-           => (lambda (var)
-               ;; (format #t "var: ~a~%" var)
-                (return port 'variable var)))
-          ((next-is-operation? port) 
-           => (lambda (op)
-                ;;(format #t "op: ~a~%" op)
-                (return port op #f)))
-          ((next-is-puctuation? port)
-           => (lambda (punc)
-               ;; (format #t "punc ~a~%" punc)
-                (return port punc #f)))
-          (else (error "invalid token!" c))))))))
+      (cond
+       ((is-whitespace? c)
+        (read-char port)
+        (next-token port)) ; skip whitespace
+       (else
+        (cond
+         ((eof-object? c) '*eoi*)
+         ((next-is-comment? port) 
+          (skip-comment port) ;; only line comment
+          (next-token port))
+         ((next-is-number? port)
+          => (lambda (base)
+               (receive (type ret) (read-number port base) (return port type ret))))
+         ((next-is-keyword? port) 
+          => (lambda (keyword)
+               (return port keyword #f)))
+         ((next-is-var? port)
+          => (lambda (var)
+               (return port 'variable var)))
+         ((next-is-operation? port) 
+          => (lambda (op)
+               (return port op #f)))
+         ((next-is-puctuation? port)
+          => (lambda (punc)
+               (return port punc #f)))
+         (else (error "invalid token!" c))))))))
 
 (define imp-tokenizer
   (lambda (port)
