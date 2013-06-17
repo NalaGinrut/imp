@@ -2,6 +2,7 @@ A simple toy language IMP.
 
 === BNF ===
 
+``` C
 Int  ::= the domain of (unbounded) integer numbers, with usual operations on them
 Bool ::= the domain of Booleans
 Id   ::= standard identifiers
@@ -23,7 +24,7 @@ Stmt ::= skip
        | if BExp then Stmt else Stmt
        | while BExp do Stmt
 Pgm  ::= var List{Id};Stmt
-
+```
 
 Reference: 
 http://fsl.cs.uiuc.edu/images/0/0d/CS522-Spring-2011-PL-book-imp.pdf
