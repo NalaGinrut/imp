@@ -13,9 +13,10 @@ AExp ::= Int
        | AExp / AExp
 BExp ::= Bool
        | AExp <= AExp   // less than
+       | AExp = AExp    // equal?
        | not BExp
        | BExp ^ BExp    // and
-       | BExp | BExp    // or      
+       | BExp | BExp    // or   
 Stmt ::= skip
        | Id := AExp     // assignment operation
        | Stmt;Stmt
