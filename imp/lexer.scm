@@ -14,16 +14,12 @@
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (language imp lexer)
+  #:use-module (language imp utils)
   #:use-module (system base lalr)
   #:use-module (ice-9 receive)
   #:use-module (ice-9 rdelim)
   #:use-module (srfi srfi-1)
   #:export (make-imp-tokenizer))
-
-(define (syntax-error what loc form . args)
-  (throw 'syntax-error #f what
-         (and=> loc source-location->source-properties)
-         form #f args))
 
 (define *operations* "~+-*=<^|:")
 
@@ -220,16 +216,6 @@
 	(unget-char1 c port)
 	#f)))))
 	  
-(define-syntax-rule (port-source-location port)
-  (make-source-location (port-filename port)
-                        (port-line port)
-                        (port-column port)
-                        (false-if-exception (ftell port))
-                        #f))
-
-(define-syntax-rule (return port category value)
-  (make-lexical-token category (port-source-location port) value))
-
 (define next-token
   (lambda (port)
     (let ((c (peek-char port)))
@@ -283,7 +269,7 @@
               (if (and (pair? stack)
                        (eq? (lexical-token-category (car stack)) 'lparen))
                   (set! stack (cdr stack))
-                  (syntax-error "unexpected right parenthesis"
+                  (lex-error "unexpected right parenthesis"
                                 (lexical-token-source tok)
                                 #f)))
              ((lbracket)
@@ -292,7 +278,7 @@
               (if (and (pair? stack)
                        (eq? (lexical-token-category (car stack)) 'lbracket))
                   (set! stack (cdr stack))
-                  (syntax-error "unexpected right bracket"
+                  (lex-error "unexpected right bracket"
                                 (lexical-token-source tok)
                                 #f)))
              ((lbrace)
@@ -301,7 +287,7 @@
               (if (and (pair? stack)
                        (eq? (lexical-token-category (car stack)) 'lbrace))
                   (set! stack (cdr stack))
-                  (syntax-error "unexpected right brace"
+                  (lex-error "unexpected right brace"
                                 (lexical-token-source tok)
                                 #f)))
              ;; NOTE: this checker promised the last semi-colon before eof will return '*eoi* directly,

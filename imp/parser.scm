@@ -14,26 +14,13 @@
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (language imp parser)
+  #:use-module (language imp utils)
   #:use-module (language imp lexer)
   #:use-module (system base lalr)
   #:export (imp-read))
 
-(define* (syntax-error message #:optional token)
-  (if (lexical-token? token)
-      (throw 'syntax-error #f message
-             (and=> (lexical-token-source token)
-                    source-location->source-properties)
-             (or (lexical-token-value token)
-                 (lexical-token-category token))
-             #f)
-      (throw 'syntax-error #f message #f token #f)))
-
-(define *eof-object*
-  (call-with-input-string "" read-char))
-
 (define (imp-read port)
-  (let ((parse (make-parser)))
-    (parse (make-imp-tokenizer port) syntax-error)))
+  (make-reader make-parser make-imp-tokenizer port))
 
 (define (make-parser)
   (lalr-parser

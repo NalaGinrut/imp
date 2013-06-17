@@ -14,14 +14,11 @@
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (language imp compile-tree-il)
+  #:use-module (language imp utils)
   #:use-module (language tree-il)
   #:use-module (ice-9 receive)
-  #:use-module (system base pmatch)
   #:use-module (srfi srfi-1)
   #:export (compile-tree-il))
-
-(define-syntax-rule (-> (type arg ...))
-  `(type ,arg ...))
 
 (define empty-lexical-environment
   (make-hash-table))
@@ -50,15 +47,6 @@
   
 ;; for emacs:
 ;; (put 'pmatch/source 'scheme-indent-function 1)
-
-(define-syntax-rule (pmatch/source x clause ...)
-  (let ((x x))
-    (let ((res (pmatch x
-                 clause ...)))
-      (let ((loc (location x)))
-        (if loc
-            (set-source-properties! res (location x))))
-      res)))
 
 (define (lookup name env)
   (hash-ref env name))
