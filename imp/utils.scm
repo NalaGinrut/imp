@@ -19,6 +19,10 @@
 
 (module-export-all! (current-module))
 
+(define is-whitespace?
+  (lambda (c)
+    (and (char? c) (char-set-contains? char-set:whitespace c))))
+
 (define* (syntax-error message #:optional token)
   (if (lexical-token? token)
       (throw 'syntax-error #f message

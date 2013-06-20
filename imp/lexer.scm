@@ -48,7 +48,7 @@
     ("^" . and)
     ("~" . not)))
 
-(define *puctuations*
+(define *punctuations*
   '((";" . semi-colon)
     ("," . comma)
     ("." . dot)
@@ -59,10 +59,6 @@
 
 (define *charset-not-in-var*
   (string->char-set (string-append *invalid-char* *delimiters*)))
-
-(define is-whitespace?
-  (lambda (c)
-    (and (char? c) (char-set-contains? char-set:whitespace c))))
 
 ;; in Simple IMP, we only have bin/oct/hex number
 (define is-number?
@@ -206,10 +202,10 @@
   (lambda (port)
     (read-delimited "\n" port)))
 
-(define next-is-puctuation?
+(define next-is-punctuation?
   (lambda (port)
     (let* ((c (read-char port))
-	   (punc (assoc-ref *puctuations* (string c))))
+	   (punc (assoc-ref *punctuations* (string c))))
       (cond
        (punc punc)
        (else
@@ -241,7 +237,7 @@
          ((next-is-operation? port) 
           => (lambda (op)
                (return port op #f)))
-         ((next-is-puctuation? port)
+         ((next-is-punctuation? port)
           => (lambda (punc)
                (return port punc #f)))
          (else (error "invalid token!" c))))))))
