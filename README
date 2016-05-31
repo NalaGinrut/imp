@@ -1,4 +1,5 @@
 A simple toy language IMP.
+Only for Guile-2.1+
 
 === BNF ===
 
